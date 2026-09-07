@@ -8,7 +8,7 @@ from app.config import settings
 from app import models
 
 
-client = NewAClient("neonize.db")
+client = NewAClient("data/neonize.db")
 
 def parse_jid(jid: str) -> JID:
     user, server = jid.split("@", 1)
