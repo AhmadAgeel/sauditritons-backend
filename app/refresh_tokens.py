@@ -41,7 +41,7 @@ def set_refresh_token_cookie(
         value=token,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="none" if settings.cookie_secure else "lax",
+        samesite="lax",
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         path="/auth",
     )
