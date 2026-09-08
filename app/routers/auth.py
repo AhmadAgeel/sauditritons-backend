@@ -293,7 +293,7 @@ def verify_magic_link(
     )
 
     access_token = oauth2.create_access_token(
-        data={"sub": str(user.id)}
+        {"sub": str(user.id)}
     )
 
     return {
@@ -368,7 +368,7 @@ def complete_signup(
     )
 
     access_token = oauth2.create_access_token(
-        data={"sub": str(user.id)}
+        {"sub": str(user.id)}
     )
 
     return {
