@@ -108,6 +108,11 @@ def create_check_in(
         .where(models.EventRSVP.ticket_code == ticket_code)
     )
 
+    guest_rsvp = None
+    if rsvp is None:
+        guest_rsvp = db.get(models.GuestEventRSVP, ticket_code)
+        rsvp = guest_rsvp
+
     if rsvp is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

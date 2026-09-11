@@ -41,13 +41,17 @@ def get_ticket(
 
     rsvp = db.scalar(stmt)
 
-    if rsvp is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ticket not found",
-        )
+    if rsvp is not None:
+        return rsvp
 
-    return rsvp
+    guest = db.scalar(
+        select(models.GuestEventRSVP)
+        .options(joinedload(models.GuestEventRSVP.event), joinedload(models.GuestEventRSVP.check_in).joinedload(models.EventCheckIn.workspace_user))
+        .where(models.GuestEventRSVP.ticket_code == normalized_code)
+    )
+    if guest is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    return {"ticket_code": guest.ticket_code, "event": guest.event, "user": None, "attendee_name": guest.attendee_name, "check_in": guest.check_in}
 
 
 @router.get("/{ticket_code}/events")

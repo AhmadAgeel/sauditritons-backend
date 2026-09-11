@@ -17,28 +17,10 @@ router = APIRouter(
 
 @router.post("/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    new_user = models.User(
-        email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        password_hash=utils.hash_password(user.password),
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Create an account using the verified UCSD email link",
     )
-    db.add(new_user)
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-
-        if isinstance(exc.orig, UniqueViolation):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email already registered",
-            )
-
-        raise
-
-    db.refresh(new_user)
-    return new_user
 
 
 @router.get("/me", response_model=schemas.UserResponse)

@@ -22,6 +22,42 @@ from app import refresh_tokens
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
+def is_ucsd_email(email: str) -> bool:
+    """Return true only for addresses in UC San Diego's primary domain."""
+    local_part, separator, domain = email.strip().lower().rpartition("@")
+    return bool(local_part and separator and domain == "ucsd.edu")
+
+
+def require_ucsd_email(email: str) -> str:
+    normalized = email.strip().lower()
+    if not is_ucsd_email(normalized):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Use your UC San Diego email address ending in @ucsd.edu",
+        )
+    return normalized
+
+
+def claim_guest_rsvps(user: models.User, db: Session) -> None:
+    """Attach guest tickets reserved with this user's verified email."""
+    guest_rsvps = db.scalars(
+        select(models.GuestEventRSVP).where(
+            models.GuestEventRSVP.attendee_email == user.email.lower()
+        )
+    ).all()
+    for guest_rsvp in guest_rsvps:
+        existing = db.get(models.EventRSVP, (guest_rsvp.event_id, user.id))
+        if existing is None:
+            db.add(models.EventRSVP(
+                event_id=guest_rsvp.event_id,
+                user_id=user.id,
+                ticket_code=guest_rsvp.ticket_code,
+                has_paid=guest_rsvp.has_paid,
+                created_at=guest_rsvp.created_at,
+            ))
+        db.delete(guest_rsvp)
+
+
 def get_valid_magic_link(
     token: str,
     db: Session,
@@ -69,7 +105,8 @@ def login(
     user_credentials: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
-    statement = select(models.User).where(models.User.email == user_credentials.username.lower())
+    email = require_ucsd_email(user_credentials.username)
+    statement = select(models.User).where(models.User.email == email)
     user = db.execute(statement).scalar_one_or_none()
 
     if (
@@ -147,7 +184,7 @@ def refresh_access_token(
         stored_token.user_id,
     )
 
-    if user is None:
+    if user is None or not is_ucsd_email(user.email):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
@@ -184,7 +221,7 @@ def request_magic_link(
     request: schemas.MagicLinkRequest,
     db: Session = Depends(get_db),
 ):
-    email = request.email.lower()
+    email = require_ucsd_email(str(request.email))
     now = datetime.now(timezone.utc)
 
     latest_magic_link = db.scalar(
@@ -265,6 +302,7 @@ def verify_magic_link(
         request.token,
         db,
     )
+    require_ucsd_email(magic_link.email)
 
     user = db.scalar(
         select(models.User).where(
@@ -279,6 +317,7 @@ def verify_magic_link(
         }
 
     magic_link.used_at = datetime.now(timezone.utc)
+    claim_guest_rsvps(user, db)
 
     refresh_token = refresh_tokens.create_refresh_token(
         user_id=user.id,
@@ -315,6 +354,7 @@ def complete_signup(
         request.token,
         db,
     )
+    require_ucsd_email(magic_link.email)
 
     user = db.scalar(
         select(models.User).where(
@@ -338,6 +378,7 @@ def complete_signup(
         password_hash=password_hash,
         first_name=request.first_name,
         last_name=request.last_name,
+        role="admin" if settings.bootstrap_admin_email and magic_link.email.lower() == settings.bootstrap_admin_email.lower() else "member",
     )
 
     db.add(user)
@@ -345,6 +386,8 @@ def complete_signup(
 
     try:
         db.flush()  # inserts user so user.id becomes available
+
+        claim_guest_rsvps(user, db)
 
         refresh_token = refresh_tokens.create_refresh_token(
             user_id=user.id,
@@ -405,10 +448,6 @@ def logout(
             db.commit()
 
     refresh_tokens.delete_refresh_token_cookie(response)
-
-
-
-
 
 
 

@@ -12,9 +12,14 @@ from app.whatsapp_client import client
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await client.connect()
-    yield
-    await client.disconnect()
+    if settings.whatsapp_enabled:
+        await client.connect()
+        try:
+            yield
+        finally:
+            await client.disconnect()
+    else:
+        yield
 
 
 app = FastAPI(lifespan=lifespan)

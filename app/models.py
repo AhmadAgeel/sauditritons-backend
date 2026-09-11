@@ -4,7 +4,10 @@ from sqlalchemy import (
     DateTime, 
     ForeignKey, 
     Index, 
+    Integer,
+    JSON,
     String, 
+    Text,
     func, 
     CheckConstraint,
     Boolean,
@@ -21,6 +24,7 @@ class User(Base):
     first_name: Mapped[str] = mapped_column(String(100), nullable = False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     password_hash: Mapped[str | None] = mapped_column(nullable=True)
+    role: Mapped[str] = mapped_column(String(32), default="member", server_default="member", nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -174,6 +178,9 @@ class Event(Base):
     title: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[str | None] = mapped_column(nullable=True)
     location: Mapped[str | None] = mapped_column(nullable=True)
+    category: Mapped[str] = mapped_column(String(80), default="Gathering", server_default="Gathering", nullable=False)
+    image_url: Mapped[str | None] = mapped_column(nullable=True)
+    capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     starts_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -191,6 +198,12 @@ class Event(Base):
 
     rsvp_closes_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        nullable=False,
+    )
+
+    show_rsvp_deadline: Mapped[bool] = mapped_column(
+        default=False,
+        server_default="false",
         nullable=False,
     )
 
@@ -264,6 +277,31 @@ class EventRSVP(Base):
     user: Mapped["User"] = relationship()
     check_in: Mapped["EventCheckIn | None"] = relationship(
         back_populates="rsvp",
+        primaryjoin="EventRSVP.ticket_code == foreign(EventCheckIn.ticket_code)",
+    )
+
+
+class GuestEventRSVP(Base):
+    __tablename__ = "guest_event_rsvps"
+
+    ticket_code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True)
+    attendee_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    attendee_email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    companion_names: Mapped[list] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    answers: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}", nullable=False)
+    has_paid: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    event: Mapped["Event"] = relationship()
+    check_in: Mapped["EventCheckIn | None"] = relationship(
+        primaryjoin="GuestEventRSVP.ticket_code == foreign(EventCheckIn.ticket_code)",
+        viewonly=True,
+        uselist=False,
+    )
+
+    __table_args__ = (
+        Index("uq_guest_event_rsvp_email", "event_id", "attendee_email", unique=True),
     )
 
 
@@ -282,10 +320,6 @@ class EventCheckIn(Base):
     __tablename__ = "event_check_ins"
 
     ticket_code: Mapped[str] = mapped_column(
-        ForeignKey(
-            "event_rsvps.ticket_code",
-            ondelete="CASCADE",
-        ),
         primary_key=True,
     )
 
@@ -306,6 +340,7 @@ class EventCheckIn(Base):
 
     rsvp: Mapped["EventRSVP"] = relationship(
         back_populates="check_in",
+        primaryjoin="foreign(EventCheckIn.ticket_code) == EventRSVP.ticket_code",
     )
 
     workspace_user: Mapped["WorkspaceUser"] = relationship(
@@ -386,6 +421,61 @@ class RefreshToken(Base):
     )
 
 
+class Announcement(Base):
+    __tablename__ = "announcements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    link_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    link_href: Mapped[str | None] = mapped_column(nullable=True)
+    is_published: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
+    is_pinned: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Resource(Base):
+    __tablename__ = "resources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), default="official_site", server_default="official_site", nullable=False)
+    source: Mapped[str] = mapped_column(String(160), nullable=False)
+    href: Mapped[str] = mapped_column(nullable=False)
+    featured: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
+    is_published: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class BoardMember(Base):
+    __tablename__ = "board_members"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    role: Mapped[str] = mapped_column(String(160), nullable=False)
+    group_name: Mapped[str] = mapped_column(String(32), default="board", server_default="board", nullable=False)
+    image_url: Mapped[str | None] = mapped_column(nullable=True)
+    linkedin_url: Mapped[str | None] = mapped_column(nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    is_published: Mapped[bool] = mapped_column(default=True, server_default="true", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    action: Mapped[str] = mapped_column(String(120), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    details: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    actor: Mapped["User"] = relationship()
 
 
 

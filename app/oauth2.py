@@ -12,7 +12,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 def create_access_token(claims: dict) -> str:
@@ -66,7 +66,25 @@ def get_current_user(
     statement = select(models.User).where(models.User.id == int(token_data.sub))
     user = db.execute(statement).scalar_one_or_none()
 
-    if user is None:
+    if user is None or not user.email.lower().endswith("@ucsd.edu"):
         raise credentials_exception
 
     return user
+
+
+def get_current_staff(current_user: models.User = Depends(get_current_user)):
+    if current_user.role not in {"content_editor", "officer", "admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff access required")
+    return current_user
+
+
+def get_current_officer(current_user: models.User = Depends(get_current_user)):
+    if current_user.role not in {"officer", "admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Officer access required")
+    return current_user
+
+
+def get_current_admin(current_user: models.User = Depends(get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return current_user

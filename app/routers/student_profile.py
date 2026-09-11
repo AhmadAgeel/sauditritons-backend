@@ -34,8 +34,14 @@ def create_student_profile(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    if not current_user.email.lower().endswith("@ucsd.edu"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A verified UC San Diego account is required",
+        )
     new_profile = models.StudentProfile(
         user_id=current_user.id,
+        is_approved=True,
         **profile.model_dump(),
     )
 
@@ -81,6 +87,12 @@ def update_my_student_profile(
 ):
     profile = db.get(models.StudentProfile, current_user.id)
 
+    if profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student profile not found",
+        )
+
     for field, value in updates.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
 
@@ -103,5 +115,4 @@ def delete_my_student_profile(
         )
     db.delete(profile)
     db.commit()
-
 

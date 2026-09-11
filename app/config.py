@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     whatsapp_community_jid: str
     whatsapp_announcements_jid: str
     whatsapp_invite_exp_days: int = 3
+    whatsapp_enabled: bool = True
 
     zeptomail_api_url: str
     zeptomail_send_token: str
@@ -35,6 +36,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
     cookie_secure: bool
+    bootstrap_admin_email: str = ""
 
     model_config = SettingsConfigDict(env_file=".env")
 

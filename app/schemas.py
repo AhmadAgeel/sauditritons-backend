@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
-from typing import Literal
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from typing import Any, Literal
 
 
 Degree = Literal["BS", "BA", "MS", "MA", "PhD"]
@@ -21,7 +21,9 @@ class UserResponse(BaseModel):
     email: EmailStr
     first_name: str
     last_name: str
+    role: Literal["member", "content_editor", "officer", "admin"]
     created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Token(BaseModel):
@@ -133,9 +135,12 @@ class WhatsAppTicketInfo(BaseModel):
 
 
 class EventCreate(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     location: str | None = None
+    category: str = "Gathering"
+    image_url: str | None = None
+    capacity: int | None = Field(default=None, ge=1)
 
     starts_at: datetime
     ends_at: datetime | None = None
@@ -157,9 +162,12 @@ class EventResponse(EventCreate):
 
 
 class EventUpdate(BaseModel):
-    title: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     location: str | None = None
+    category: str | None = None
+    image_url: str | None = None
+    capacity: int | None = Field(default=None, ge=1)
 
     starts_at: datetime | None = None
     ends_at: datetime | None = None
@@ -177,6 +185,25 @@ class EventRSVPResponse(BaseModel):
     event_id: int
     user_id: int
     ticket_code: str
+    has_paid: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GuestEventRSVPCreate(BaseModel):
+    attendee_name: str = Field(min_length=1, max_length=160)
+    attendee_email: EmailStr
+    companion_names: list[str] = Field(default_factory=list, max_length=3)
+    answers: dict[str, Any] = Field(default_factory=dict)
+
+
+class GuestEventRSVPResponse(BaseModel):
+    event_id: int
+    ticket_code: str
+    attendee_name: str
+    attendee_email: EmailStr
+    companion_names: list[str]
     has_paid: bool
     created_at: datetime
 
@@ -228,7 +255,8 @@ class EventRSVPUser(BaseModel):
 class PublicTicketResponse(BaseModel):
     ticket_code: str
     event: EventSummary
-    user: EventRSVPUser
+    user: EventRSVPUser | None = None
+    attendee_name: str | None = None
     check_in: PublicTicketCheckIn | None
 
     model_config = ConfigDict(from_attributes=True)
@@ -303,8 +331,124 @@ class TicketCheckInEvent(BaseModel):
     scanned_by: str
 
 
+UserRole = Literal["member", "content_editor", "officer", "admin"]
 
 
+class AdminUserResponse(UserResponse):
+    student_profile: StudentProfileResponse | None = None
 
+
+class UserRoleUpdate(BaseModel):
+    role: UserRole
+
+
+class ProfileModerationUpdate(BaseModel):
+    is_approved: bool | None = None
+    board_membership_status: BoardMembershipStatus | None = None
+
+
+class AnnouncementCreate(BaseModel):
+    title: str
+    body: str
+    link_label: str | None = None
+    link_href: str | None = None
+    is_published: bool = False
+    is_pinned: bool = False
+
+
+class AnnouncementUpdate(BaseModel):
+    title: str | None = None
+    body: str | None = None
+    link_label: str | None = None
+    link_href: str | None = None
+    is_published: bool | None = None
+    is_pinned: bool | None = None
+
+
+class AnnouncementResponse(AnnouncementCreate):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ResourceCreate(BaseModel):
+    title: str
+    description: str
+    category: str
+    kind: Literal["pdf", "official_site"] = "official_site"
+    source: str
+    href: str
+    featured: bool = False
+    is_published: bool = False
+
+
+class ResourceUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    category: str | None = None
+    kind: Literal["pdf", "official_site"] | None = None
+    source: str | None = None
+    href: str | None = None
+    featured: bool | None = None
+    is_published: bool | None = None
+
+
+class ResourceResponse(ResourceCreate):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BoardMemberCreate(BaseModel):
+    name: str
+    role: str
+    group_name: Literal["executive", "board"] = "board"
+    image_url: str | None = None
+    linkedin_url: str | None = None
+    email: EmailStr | None = None
+    sort_order: int = 0
+    is_published: bool = True
+
+
+class BoardMemberUpdate(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    group_name: Literal["executive", "board"] | None = None
+    image_url: str | None = None
+    linkedin_url: str | None = None
+    email: EmailStr | None = None
+    sort_order: int | None = None
+    is_published: bool | None = None
+
+
+class BoardMemberResponse(BoardMemberCreate):
+    id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuditLogResponse(BaseModel):
+    id: int
+    actor_user_id: int
+    action: str
+    target_type: str
+    target_id: str
+    details: dict[str, Any]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdminRsvpResponse(BaseModel):
+    ticket_code: str
+    attendee_name: str
+    attendee_email: str | None
+    companion_count: int
+    has_paid: bool
+    checked_in_at: datetime | None
+    created_at: datetime
+
+
+class AdminCheckInCreate(BaseModel):
+    mark_paid: bool = False
 
 
