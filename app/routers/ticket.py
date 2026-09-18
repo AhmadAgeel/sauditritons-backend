@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app import models, schemas
 from app.database import get_db
 from app.redis import async_redis_client
-from app.wallet_pass import WalletNotConfiguredError, WalletServiceError, build_event_pass, wallet_is_configured
+from app.wallet_pass import WalletNotConfiguredError, WalletServiceError, build_event_pass, wallet_is_configured, wallet_provider
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -19,7 +19,7 @@ router = APIRouter(
 
 @router.get("/wallet/status")
 def wallet_status():
-    return {"available": wallet_is_configured()}
+    return {"available": wallet_is_configured(), "provider": wallet_provider()}
 
 
 @router.get(

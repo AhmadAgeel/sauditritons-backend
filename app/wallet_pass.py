@@ -2,6 +2,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import struct
 import zlib
 import zipfile
@@ -27,14 +28,26 @@ class WalletServiceError(RuntimeError):
 WALLETWALLET_ENDPOINT = "https://api.walletwallet.dev/api/passes"
 
 
-def wallet_is_configured() -> bool:
-    return bool(settings.walletwallet_api_key) or all((
+def _walletwallet_key() -> str:
+    return (settings.walletwallet_api_key or os.getenv("WALLETWALLET_API_KEY", "")).strip()
+
+
+def wallet_provider() -> str | None:
+    if _walletwallet_key():
+        return "walletwallet"
+    if all((
         settings.apple_wallet_pass_type_identifier,
         settings.apple_wallet_team_identifier,
         settings.apple_wallet_signing_cert_base64,
         settings.apple_wallet_signing_key_base64,
         settings.apple_wallet_wwdr_cert_base64,
-    ))
+    )):
+        return "apple-certificates"
+    return None
+
+
+def wallet_is_configured() -> bool:
+    return wallet_provider() is not None
 
 
 def _walletwallet_event_pass(*, ticket_code: str, holder_name: str, companion_count: int, event) -> bytes:
@@ -73,7 +86,7 @@ def _walletwallet_event_pass(*, ticket_code: str, holder_name: str, companion_co
         response = requests.post(
             WALLETWALLET_ENDPOINT,
             headers={
-                "Authorization": f"Bearer {settings.walletwallet_api_key}",
+                "Authorization": f"Bearer {_walletwallet_key()}",
                 "Content-Type": "application/json",
             },
             json=payload,
@@ -119,7 +132,7 @@ def _solid_png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
 
 
 def build_event_pass(*, ticket_code: str, holder_name: str, companion_count: int, event) -> bytes:
-    if settings.walletwallet_api_key:
+    if _walletwallet_key():
         return _walletwallet_event_pass(
             ticket_code=ticket_code,
             holder_name=holder_name,
