@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     apple_wallet_signing_key_base64: str = ""
     apple_wallet_signing_key_password: str = ""
     apple_wallet_wwdr_cert_base64: str = ""
+    walletwallet_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env")
 

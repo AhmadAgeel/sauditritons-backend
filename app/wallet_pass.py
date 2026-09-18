@@ -6,7 +6,9 @@ import struct
 import zlib
 import zipfile
 from datetime import timezone
+from zoneinfo import ZoneInfo
 
+import requests
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs7
@@ -18,14 +20,82 @@ class WalletNotConfiguredError(RuntimeError):
     pass
 
 
+class WalletServiceError(RuntimeError):
+    pass
+
+
+WALLETWALLET_ENDPOINT = "https://api.walletwallet.dev/api/passes"
+
+
 def wallet_is_configured() -> bool:
-    return all((
+    return bool(settings.walletwallet_api_key) or all((
         settings.apple_wallet_pass_type_identifier,
         settings.apple_wallet_team_identifier,
         settings.apple_wallet_signing_cert_base64,
         settings.apple_wallet_signing_key_base64,
         settings.apple_wallet_wwdr_cert_base64,
     ))
+
+
+def _walletwallet_event_pass(*, ticket_code: str, holder_name: str, companion_count: int, event) -> bytes:
+    starts_at = event.starts_at.astimezone(ZoneInfo("America/Los_Angeles"))
+    party_size = 1 + companion_count
+    payload = {
+        "barcodeValue": ticket_code,
+        "barcodeFormat": "QR",
+        "barcodeAltText": ticket_code,
+        "logoText": "SSA at UC San Diego",
+        "organizationName": "Saudi Students Association",
+        "description": f"Ticket for {event.title}",
+        "colorPreset": "green",
+        "sharingProhibited": True,
+        "expirationDays": 30,
+        "headerFields": [{"label": "ADMIT", "value": str(party_size)}],
+        "primaryFields": [{"label": "EVENT", "value": event.title}],
+        "secondaryFields": [
+            {"label": "GUEST", "value": holder_name},
+            {"label": "DATE", "value": starts_at.strftime("%b %-d, %Y")},
+        ],
+        "auxiliaryFields": [
+            {"label": "TIME", "value": starts_at.strftime("%-I:%M %p PT")},
+            {"label": "LOCATION", "value": event.location or "To be announced"},
+        ],
+        "backFields": [
+            {
+                "label": "ENTRY",
+                "value": "Present this ticket at the door. This ticket can be scanned once.",
+            },
+            {"label": "TICKET CODE", "value": ticket_code},
+            {"label": "PARTY SIZE", "value": str(party_size)},
+        ],
+    }
+    try:
+        response = requests.post(
+            WALLETWALLET_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {settings.walletwallet_api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=12,
+        )
+    except requests.RequestException as error:
+        raise WalletServiceError("Apple Wallet is temporarily unavailable. Try again.") from error
+
+    if response.status_code == 429:
+        raise WalletServiceError("The monthly Apple Wallet ticket limit has been reached.")
+    if not response.ok:
+        raise WalletServiceError("Apple Wallet could not create this ticket. Try again.")
+
+    try:
+        encoded_pass = response.json()["applePass"]
+        content = base64.b64decode(encoded_pass, validate=True)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise WalletServiceError("Apple Wallet returned an incomplete ticket. Try again.") from error
+
+    if not content.startswith(b"PK"):
+        raise WalletServiceError("Apple Wallet returned an invalid ticket. Try again.")
+    return content
 
 
 def _decoded(value: str) -> bytes:
@@ -49,6 +119,13 @@ def _solid_png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
 
 
 def build_event_pass(*, ticket_code: str, holder_name: str, companion_count: int, event) -> bytes:
+    if settings.walletwallet_api_key:
+        return _walletwallet_event_pass(
+            ticket_code=ticket_code,
+            holder_name=holder_name,
+            companion_count=companion_count,
+            event=event,
+        )
     if not wallet_is_configured():
         raise WalletNotConfiguredError
 

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app import models, schemas
 from app.database import get_db
 from app.redis import async_redis_client
-from app.wallet_pass import WalletNotConfiguredError, build_event_pass, wallet_is_configured
+from app.wallet_pass import WalletNotConfiguredError, WalletServiceError, build_event_pass, wallet_is_configured
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -88,6 +88,8 @@ def download_wallet_pass(ticket_code: str, db: Session = Depends(get_db)):
         )
     except WalletNotConfiguredError:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Apple Wallet passes are not configured yet")
+    except WalletServiceError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(error))
     except (ValueError, TypeError):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Apple Wallet signing credentials are invalid")
     return Response(

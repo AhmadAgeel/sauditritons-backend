@@ -65,7 +65,12 @@ def create_event(payload: schemas.EventCreate, actor: models.User = Depends(oaut
 def update_event(event_id: int, payload: schemas.EventUpdate, actor: models.User = Depends(oauth2.get_current_staff), db: Session = Depends(get_db)):
     record = require_record(db, models.Event, event_id); apply_updates(record, payload)
     validate_event_schedule(record)
-    audit(db, actor, "event.updated", "event", event_id, payload.model_dump(exclude_unset=True))
+    details = payload.model_dump(exclude_unset=True)
+    if isinstance(details.get("image_url"), str) and details["image_url"].startswith("data:image/"):
+        # Keep inline image data on the event only. Duplicating it into the
+        # audit JSON makes an ordinary edit unnecessarily large and fragile.
+        details["image_url"] = "[uploaded image]"
+    audit(db, actor, "event.updated", "event", event_id, details)
     db.commit(); db.refresh(record)
     return record
 
