@@ -18,7 +18,7 @@ python3 -m venv .venv
 cp .env.example .env
 ```
 
-Set local database credentials, a strong `SECRET_KEY`, and the frontend origin in `.env`. To bootstrap the first administrator, set `BOOTSTRAP_ADMIN_EMAIL` to the email address that will create the first admin account. Keep `WHATSAPP_ENABLED=false` until WhatsApp credentials are configured.
+Set local database credentials, a strong `SECRET_KEY`, and the frontend origin in `.env`. To bootstrap the first administrator, set `BOOTSTRAP_ADMIN_EMAIL` to an existing account email. On startup, that account is promoted only when the database has no administrator. Keep `WHATSAPP_ENABLED=false` until WhatsApp credentials are configured.
 
 Apply migrations and run the API:
 
