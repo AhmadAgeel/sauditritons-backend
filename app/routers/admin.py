@@ -1,6 +1,7 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -13,7 +14,17 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
 def audit(db: Session, actor: models.User, action: str, target_type: str, target_id: object, details: dict | None = None):
-    db.add(models.AdminAuditLog(actor_user_id=actor.id, action=action, target_type=target_type, target_id=str(target_id), details=details or {}))
+    # Audit details are stored in a JSON column. Event updates contain Python
+    # datetime values, which PostgreSQL's JSON serializer cannot encode unless
+    # they are normalized first. Keep this conversion centralized so every
+    # audited payload is safe to commit.
+    db.add(models.AdminAuditLog(
+        actor_user_id=actor.id,
+        action=action,
+        target_type=target_type,
+        target_id=str(target_id),
+        details=jsonable_encoder(details or {}),
+    ))
 
 
 def apply_updates(record, update):
