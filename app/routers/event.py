@@ -187,6 +187,41 @@ def cancel_guest_rsvp(event_id: int, email: str, ticket_code: str, db: Session =
     db.delete(record); db.commit()
 
 
+@router.delete("/{event_id}/registration", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_registration(event_id: int, email: str, ticket_code: str, db: Session = Depends(get_db)):
+    """Cancel either a guest or account RSVP using the ticket owner's email."""
+    normalized_email = email.strip().lower()
+    normalized_code = ticket_code.replace("-", "").strip().upper()
+    if not normalized_email or not normalized_code:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
+
+    guest = db.scalar(select(models.GuestEventRSVP).where(
+        models.GuestEventRSVP.event_id == event_id,
+        func.lower(models.GuestEventRSVP.attendee_email) == normalized_email,
+        models.GuestEventRSVP.ticket_code == normalized_code,
+    ))
+    member = None
+    if guest is None:
+        member = db.scalar(
+            select(models.EventRSVP)
+            .join(models.User, models.User.id == models.EventRSVP.user_id)
+            .where(
+                models.EventRSVP.event_id == event_id,
+                models.EventRSVP.ticket_code == normalized_code,
+                func.lower(models.User.email) == normalized_email,
+            )
+        )
+
+    registration = guest or member
+    if registration is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registration not found")
+    if db.get(models.EventCheckIn, normalized_code) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot cancel after check-in")
+
+    db.delete(registration)
+    db.commit()
+
+
 @router.delete(
     "/{event_id}/rsvp",
     status_code=status.HTTP_204_NO_CONTENT,
