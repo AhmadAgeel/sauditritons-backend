@@ -52,6 +52,10 @@ class StudentProfile(Base):
             "board_membership_status IN ('current', 'former', 'never')",
             name="ck_student_profiles_board_membership_status",
         ),
+        CheckConstraint(
+            "member_type IN ('current_student', 'alumni')",
+            name="ck_student_profiles_member_type",
+        ),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -68,6 +72,13 @@ class StudentProfile(Base):
     second_minor: Mapped[str | None] = mapped_column(nullable=True)
 
     graduation_year: Mapped[int] = mapped_column(nullable=False)
+    member_type: Mapped[str] = mapped_column(
+        String(32),
+        default="current_student",
+        server_default="current_student",
+        nullable=False,
+    )
+    company: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     bio: Mapped[str | None] = mapped_column(nullable=True)
 
@@ -178,6 +189,7 @@ class Event(Base):
     title: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[str | None] = mapped_column(nullable=True)
     location: Mapped[str | None] = mapped_column(nullable=True)
+    location_url: Mapped[str | None] = mapped_column(nullable=True)
     category: Mapped[str] = mapped_column(String(80), default="Gathering", server_default="Gathering", nullable=False)
     image_url: Mapped[str | None] = mapped_column(nullable=True)
     capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -258,6 +270,13 @@ class EventRSVP(Base):
 
     ticket_code: Mapped[str] = mapped_column(
         unique=True,
+        nullable=False,
+    )
+
+    companion_names: Mapped[list] = mapped_column(
+        JSON,
+        default=list,
+        server_default="[]",
         nullable=False,
     )
 
@@ -476,8 +495,6 @@ class AdminAuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     actor: Mapped["User"] = relationship()
-
-
 
 
 

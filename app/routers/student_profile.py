@@ -34,14 +34,9 @@ def create_student_profile(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not current_user.email.lower().endswith("@ucsd.edu"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="A verified UC San Diego account is required",
-        )
     new_profile = models.StudentProfile(
         user_id=current_user.id,
-        is_approved=True,
+        is_approved=current_user.email.lower().endswith("@ucsd.edu"),
         **profile.model_dump(),
     )
 
@@ -115,4 +110,3 @@ def delete_my_student_profile(
         )
     db.delete(profile)
     db.commit()
-

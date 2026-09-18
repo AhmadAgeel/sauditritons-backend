@@ -1,12 +1,13 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
 from app.database import get_db
 from app.redis import async_redis_client
+from app.wallet_pass import WalletNotConfiguredError, build_event_pass, wallet_is_configured
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -14,6 +15,11 @@ router = APIRouter(
     prefix="/ticket",
     tags=["Tickets"],
 )
+
+
+@router.get("/wallet/status")
+def wallet_status():
+    return {"available": wallet_is_configured()}
 
 
 @router.get(
@@ -51,7 +57,44 @@ def get_ticket(
     )
     if guest is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
-    return {"ticket_code": guest.ticket_code, "event": guest.event, "user": None, "attendee_name": guest.attendee_name, "check_in": guest.check_in}
+    return {"ticket_code": guest.ticket_code, "event": guest.event, "user": None, "attendee_name": guest.attendee_name, "companion_names": guest.companion_names, "check_in": guest.check_in}
+
+
+@router.get("/{ticket_code}/wallet")
+def download_wallet_pass(ticket_code: str, db: Session = Depends(get_db)):
+    normalized_code = ticket_code.replace("-", "").upper()
+    member = db.scalar(
+        select(models.EventRSVP)
+        .options(joinedload(models.EventRSVP.event), joinedload(models.EventRSVP.user))
+        .where(models.EventRSVP.ticket_code == normalized_code)
+    )
+    guest = None
+    if member is None:
+        guest = db.scalar(
+            select(models.GuestEventRSVP)
+            .options(joinedload(models.GuestEventRSVP.event))
+            .where(models.GuestEventRSVP.ticket_code == normalized_code)
+        )
+    registration = member or guest
+    if registration is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    holder_name = f"{member.user.first_name} {member.user.last_name}" if member else guest.attendee_name
+    try:
+        content = build_event_pass(
+            ticket_code=normalized_code,
+            holder_name=holder_name,
+            companion_count=len(registration.companion_names),
+            event=registration.event,
+        )
+    except WalletNotConfiguredError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Apple Wallet passes are not configured yet")
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Apple Wallet signing credentials are invalid")
+    return Response(
+        content=content,
+        media_type="application/vnd.apple.pkpass",
+        headers={"Content-Disposition": f'attachment; filename="ssa-{normalized_code}.pkpass"'},
+    )
 
 
 @router.get("/{ticket_code}/events")

@@ -22,20 +22,8 @@ from app import refresh_tokens
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
-def is_ucsd_email(email: str) -> bool:
-    """Return true only for addresses in UC San Diego's primary domain."""
-    local_part, separator, domain = email.strip().lower().rpartition("@")
-    return bool(local_part and separator and domain == "ucsd.edu")
-
-
-def require_ucsd_email(email: str) -> str:
-    normalized = email.strip().lower()
-    if not is_ucsd_email(normalized):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Use your UC San Diego email address ending in @ucsd.edu",
-        )
-    return normalized
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
 
 
 def claim_guest_rsvps(user: models.User, db: Session) -> None:
@@ -52,6 +40,7 @@ def claim_guest_rsvps(user: models.User, db: Session) -> None:
                 event_id=guest_rsvp.event_id,
                 user_id=user.id,
                 ticket_code=guest_rsvp.ticket_code,
+                companion_names=guest_rsvp.companion_names,
                 has_paid=guest_rsvp.has_paid,
                 created_at=guest_rsvp.created_at,
             ))
@@ -105,7 +94,7 @@ def login(
     user_credentials: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
-    email = require_ucsd_email(user_credentials.username)
+    email = normalize_email(user_credentials.username)
     statement = select(models.User).where(models.User.email == email)
     user = db.execute(statement).scalar_one_or_none()
 
@@ -184,7 +173,7 @@ def refresh_access_token(
         stored_token.user_id,
     )
 
-    if user is None or not is_ucsd_email(user.email):
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
@@ -221,7 +210,7 @@ def request_magic_link(
     request: schemas.MagicLinkRequest,
     db: Session = Depends(get_db),
 ):
-    email = require_ucsd_email(str(request.email))
+    email = normalize_email(str(request.email))
     now = datetime.now(timezone.utc)
 
     latest_magic_link = db.scalar(
@@ -302,8 +291,6 @@ def verify_magic_link(
         request.token,
         db,
     )
-    require_ucsd_email(magic_link.email)
-
     user = db.scalar(
         select(models.User).where(
             models.User.email == magic_link.email
@@ -354,8 +341,6 @@ def complete_signup(
         request.token,
         db,
     )
-    require_ucsd_email(magic_link.email)
-
     user = db.scalar(
         select(models.User).where(
             models.User.email == magic_link.email
@@ -448,7 +433,4 @@ def logout(
             db.commit()
 
     refresh_tokens.delete_refresh_token_cookie(response)
-
-
-
 

@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     cookie_secure: bool
     bootstrap_admin_email: str = ""
 
+    apple_wallet_pass_type_identifier: str = ""
+    apple_wallet_team_identifier: str = ""
+    apple_wallet_organization_name: str = "Saudi Students Association at UC San Diego"
+    apple_wallet_signing_cert_base64: str = ""
+    apple_wallet_signing_key_base64: str = ""
+    apple_wallet_signing_key_password: str = ""
+    apple_wallet_wwdr_cert_base64: str = ""
+
     model_config = SettingsConfigDict(env_file=".env")
 
 

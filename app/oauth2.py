@@ -66,7 +66,7 @@ def get_current_user(
     statement = select(models.User).where(models.User.id == int(token_data.sub))
     user = db.execute(statement).scalar_one_or_none()
 
-    if user is None or not user.email.lower().endswith("@ucsd.edu"):
+    if user is None:
         raise credentials_exception
 
     return user

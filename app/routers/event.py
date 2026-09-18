@@ -32,9 +32,9 @@ def validate_registration(event: models.Event, db: Session, requested_seats: int
     if now >= event.rsvp_closes_at:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="RSVP has closed")
     if event.capacity is not None:
-        members = db.scalar(select(func.count()).select_from(models.EventRSVP).where(models.EventRSVP.event_id == event.id)) or 0
+        member_groups = db.scalars(select(models.EventRSVP.companion_names).where(models.EventRSVP.event_id == event.id)).all()
         guest_groups = db.scalars(select(models.GuestEventRSVP.companion_names).where(models.GuestEventRSVP.event_id == event.id)).all()
-        occupied = members + sum(1 + len(companions) for companions in guest_groups)
+        occupied = sum(1 + len(companions) for companions in member_groups) + sum(1 + len(companions) for companions in guest_groups)
         if occupied + requested_seats > event.capacity:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This event is full")
 
@@ -99,6 +99,7 @@ def get_event(
 )
 def create_rsvp(
     event_id: int,
+    payload: schemas.EventRSVPCreate | None = None,
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -121,12 +122,14 @@ def create_rsvp(
             detail="Already RSVP'd",
         )
 
-    validate_registration(event, db)
+    companion_names = [name.strip() for name in (payload.companion_names if payload else []) if name.strip()]
+    validate_registration(event, db, 1 + len(companion_names))
 
     rsvp = models.EventRSVP(
         event_id=event_id,
         user_id=current_user.id,
         ticket_code=generate_ticket_code(),
+        companion_names=companion_names,
     )
 
     db.add(rsvp)

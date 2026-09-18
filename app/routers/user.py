@@ -19,7 +19,7 @@ router = APIRouter(
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Create an account using the verified UCSD email link",
+        detail="Create an account using the verified email link",
     )
 
 

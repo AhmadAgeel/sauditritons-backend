@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 Degree = Literal["BS", "BA", "MS", "MA", "PhD"]
 BoardMembershipStatus = Literal["current", "former", "never"]
+MemberType = Literal["current_student", "alumni"]
 CheckInMethod = Literal["qr", "manual"]
 
 
@@ -45,6 +46,8 @@ class StudentProfileCreate(BaseModel):
     major: str
     graduation_year: int
     is_visible: bool
+    member_type: MemberType = "current_student"
+    company: str | None = Field(default=None, max_length=200)
 
     second_major: str | None = None
     minor: str | None = None
@@ -74,6 +77,8 @@ class StudentProfileUpdate(BaseModel):
     degree: Degree | None = None
     major: str | None = None
     graduation_year: int | None = None
+    member_type: MemberType | None = None
+    company: str | None = Field(default=None, max_length=200)
 
     second_major: str | None = None
     minor: str | None = None
@@ -138,6 +143,7 @@ class EventCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     location: str | None = None
+    location_url: str | None = None
     category: str = "Gathering"
     image_url: str | None = None
     capacity: int | None = Field(default=None, ge=1)
@@ -165,6 +171,7 @@ class EventUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     location: str | None = None
+    location_url: str | None = None
     category: str | None = None
     image_url: str | None = None
     capacity: int | None = Field(default=None, ge=1)
@@ -181,10 +188,15 @@ class EventUpdate(BaseModel):
     is_published: bool | None = None
 
 
+class EventRSVPCreate(BaseModel):
+    companion_names: list[str] = Field(default_factory=list, max_length=3)
+
+
 class EventRSVPResponse(BaseModel):
     event_id: int
     user_id: int
     ticket_code: str
+    companion_names: list[str]
     has_paid: bool
     created_at: datetime
 
@@ -214,6 +226,7 @@ class EventSummary(BaseModel):
     id: int
     title: str
     location: str | None
+    location_url: str | None
     starts_at: datetime
     ends_at: datetime | None
     requires_check_in: bool
@@ -224,6 +237,7 @@ class EventSummary(BaseModel):
 class MyEventRSVPResponse(BaseModel):
     event_id: int
     ticket_code: str
+    companion_names: list[str]
     has_paid: bool
     created_at: datetime
     event: EventSummary
@@ -257,6 +271,7 @@ class PublicTicketResponse(BaseModel):
     event: EventSummary
     user: EventRSVPUser | None = None
     attendee_name: str | None = None
+    companion_names: list[str]
     check_in: PublicTicketCheckIn | None
 
     model_config = ConfigDict(from_attributes=True)
@@ -450,5 +465,3 @@ class AdminRsvpResponse(BaseModel):
 
 class AdminCheckInCreate(BaseModel):
     mark_paid: bool = False
-
-

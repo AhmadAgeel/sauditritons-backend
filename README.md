@@ -20,6 +20,8 @@ cp .env.example .env
 
 Set local database credentials, a strong `SECRET_KEY`, and the frontend origin in `.env`. To bootstrap the first administrator, set `BOOTSTRAP_ADMIN_EMAIL` to an existing account email. On startup, that account is promoted only when the database has no administrator. Keep `WHATSAPP_ENABLED=false` until WhatsApp credentials are configured.
 
+Apple Wallet passes require an Apple Developer Pass Type ID certificate. Set `APPLE_WALLET_PASS_TYPE_IDENTIFIER`, `APPLE_WALLET_TEAM_IDENTIFIER`, and base64-encoded signing certificate, private key, and Apple WWDR certificate values. The ticket endpoint returns a signed `.pkpass` only when all five values are present; QR tickets and door scanning continue to work without Wallet credentials.
+
 Apply migrations and run the API:
 
 ```sh

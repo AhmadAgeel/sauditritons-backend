@@ -53,6 +53,22 @@ def create_ticket(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
+    now = datetime.now(timezone.utc)
+    existing_tickets = db.scalars(
+        select(models.WhatsAppTicket)
+        .options(selectinload(models.WhatsAppTicket.invite))
+        .where(models.WhatsAppTicket.user_id == current_user.id)
+    ).all()
+    counted_invites = sum(
+        ticket.invite is not None
+        or now < ticket.created_at + timedelta(days=settings.whatsapp_invite_exp_days)
+        for ticket in existing_tickets
+    )
+    if counted_invites >= 3:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Each member can have up to three WhatsApp invites",
+        )
     ticket = models.WhatsAppTicket(
         token=secrets.token_urlsafe(5),
         user_id=current_user.id,
@@ -136,4 +152,3 @@ async def use_ticket(
         url=wa_inv_link,
         status_code=status.HTTP_303_SEE_OTHER,
     )
-
