@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -25,9 +27,13 @@ class Settings(BaseSettings):
     whatsapp_invite_exp_days: int = 3
     whatsapp_enabled: bool = True
 
-    zeptomail_api_url: str
-    zeptomail_send_token: str
+    email_provider: Literal["zeptomail", "postmark"] = "zeptomail"
+    zeptomail_api_url: str = "https://api.zeptomail.com/v1.1/email"
+    zeptomail_send_token: str = ""
+    postmark_api_url: str = "https://api.postmarkapp.com/email"
+    postmark_server_token: str = ""
     auth_email_from: str
+    auth_email_reply_to: str = ""
     magic_link_request_cooldown_minutes: int = 1
 
     redis_url: str
@@ -57,6 +63,7 @@ class Settings(BaseSettings):
     walletwallet_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env")
+
 
 
 settings = Settings()
