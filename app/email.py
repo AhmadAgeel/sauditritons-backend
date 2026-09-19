@@ -33,7 +33,11 @@ class EmailService:
             f"This link expires in {settings.magic_link_expiration_minutes} minutes."
         )
 
-        sender = self._send_postmark if settings.email_provider == "postmark" else self._send_zeptomail
+        sender = {
+            "postmark": self._send_postmark,
+            "resend": self._send_resend,
+            "zeptomail": self._send_zeptomail,
+        }[settings.email_provider]
         sender(
             to_email=to_email,
             subject=subject,
@@ -134,6 +138,54 @@ class EmailService:
             "Postmark accepted magic-link email client_reference=%s message_id=%s elapsed_ms=%d",
             client_reference,
             body.get("MessageID", "unknown"),
+            round((time.monotonic() - started_at) * 1000),
+        )
+
+    def _send_resend(
+        self,
+        *,
+        to_email: str,
+        subject: str,
+        html_body: str,
+        text_body: str,
+        client_reference: str,
+    ):
+        if not settings.resend_api_key:
+            raise requests.RequestException("RESEND_API_KEY is not configured")
+        sender = (
+            settings.auth_email_from
+            if "<" in settings.auth_email_from
+            else f"Saudi Students Association <{settings.auth_email_from}>"
+        )
+        payload = {
+            "from": sender,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body,
+            "text": text_body,
+            "tags": [{"name": "category", "value": "authentication"}],
+        }
+        if settings.auth_email_reply_to:
+            payload["reply_to"] = settings.auth_email_reply_to
+
+        started_at = time.monotonic()
+        response = requests.post(
+            settings.resend_api_url,
+            json=payload,
+            headers={
+                "accept": "application/json",
+                "content-type": "application/json",
+                "authorization": f"Bearer {settings.resend_api_key}",
+                "Idempotency-Key": client_reference,
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        body = response.json()
+        logger.info(
+            "Resend accepted magic-link email client_reference=%s email_id=%s elapsed_ms=%d",
+            client_reference,
+            body.get("id", "unknown"),
             round((time.monotonic() - started_at) * 1000),
         )
 

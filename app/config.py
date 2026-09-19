@@ -27,11 +27,13 @@ class Settings(BaseSettings):
     whatsapp_invite_exp_days: int = 3
     whatsapp_enabled: bool = True
 
-    email_provider: Literal["zeptomail", "postmark"] = "zeptomail"
+    email_provider: Literal["zeptomail", "postmark", "resend"] = "zeptomail"
     zeptomail_api_url: str = "https://api.zeptomail.com/v1.1/email"
     zeptomail_send_token: str = ""
     postmark_api_url: str = "https://api.postmarkapp.com/email"
     postmark_server_token: str = ""
+    resend_api_url: str = "https://api.resend.com/emails"
+    resend_api_key: str = ""
     auth_email_from: str
     auth_email_reply_to: str = ""
     magic_link_request_cooldown_minutes: int = 1
