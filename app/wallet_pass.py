@@ -180,7 +180,12 @@ def build_event_pass(*, ticket_code: str, holder_name: str, companion_count: int
         "logo.png": _solid_png(160, 50, (12, 52, 48)),
         "logo@2x.png": _solid_png(320, 100, (12, 52, 48)),
     }
-    manifest = {name: hashlib.sha1(content).hexdigest() for name, content in files.items()}
+    # PassKit requires SHA-1 digests in manifest.json. These hashes identify the
+    # bundled files; the manifest itself is signed below with SHA-256.
+    manifest = {
+        name: hashlib.sha1(content, usedforsecurity=False).hexdigest()
+        for name, content in files.items()
+    }
     manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
 
     certificate = _certificate(settings.apple_wallet_signing_cert_base64)

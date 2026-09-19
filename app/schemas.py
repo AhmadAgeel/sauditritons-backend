@@ -1,13 +1,34 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 
 Degree = Literal["BS", "BA", "MS", "MA", "PhD"]
 BoardMembershipStatus = Literal["current", "former", "never"]
 MemberType = Literal["current_student", "alumni"]
 CheckInMethod = Literal["qr", "manual"]
+
+
+def safe_public_url(value: str | None, *, allow_relative: bool = False, allow_data_image: bool = False):
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if allow_relative and normalized.startswith("/") and not normalized.startswith("//"):
+        return normalized
+    if allow_data_image and normalized.startswith(("data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,")):
+        if len(normalized) > 2_750_000:
+            raise ValueError("Image data is too large")
+        return normalized
+    parsed = urlsplit(normalized)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise ValueError("Public links must use a complete https URL")
+    if len(normalized) > 2048:
+        raise ValueError("Public link is too long")
+    return normalized
 
 
 class UserCreate(BaseModel):
@@ -59,6 +80,11 @@ class StudentProfileCreate(BaseModel):
     bio: str | None = None
     profile_photo_url: str | None = None
 
+    @field_validator("linkedin_url", "github_url", "profile_photo_url")
+    @classmethod
+    def validate_public_profile_url(cls, value: str | None):
+        return safe_public_url(value)
+
 
 class StudentProfileUser(BaseModel):
     first_name: str
@@ -91,6 +117,11 @@ class StudentProfileUpdate(BaseModel):
     profile_photo_url: str | None = None
 
     is_visible: bool | None = None
+
+    @field_validator("linkedin_url", "github_url", "profile_photo_url")
+    @classmethod
+    def validate_public_profile_url(cls, value: str | None):
+        return safe_public_url(value)
 
 
 class WhatsAppTicketResponse(BaseModel):
@@ -159,6 +190,16 @@ class EventCreate(BaseModel):
     requires_check_in: bool = False
     is_published: bool = False
 
+    @field_validator("location_url")
+    @classmethod
+    def validate_location_url(cls, value: str | None):
+        return safe_public_url(value)
+
+    @field_validator("image_url")
+    @classmethod
+    def validate_image_url(cls, value: str | None):
+        return safe_public_url(value, allow_relative=True, allow_data_image=True)
+
 
 class EventResponse(EventCreate):
     id: int
@@ -186,6 +227,16 @@ class EventUpdate(BaseModel):
     is_paid: bool | None = None
     requires_check_in: bool | None = None
     is_published: bool | None = None
+
+    @field_validator("location_url")
+    @classmethod
+    def validate_location_url(cls, value: str | None):
+        return safe_public_url(value)
+
+    @field_validator("image_url")
+    @classmethod
+    def validate_image_url(cls, value: str | None):
+        return safe_public_url(value, allow_relative=True, allow_data_image=True)
 
 
 class EventRSVPCreate(BaseModel):
@@ -370,6 +421,11 @@ class AnnouncementCreate(BaseModel):
     is_published: bool = False
     is_pinned: bool = False
 
+    @field_validator("link_href")
+    @classmethod
+    def validate_link_href(cls, value: str | None):
+        return safe_public_url(value, allow_relative=True)
+
 
 class AnnouncementUpdate(BaseModel):
     title: str | None = None
@@ -378,6 +434,11 @@ class AnnouncementUpdate(BaseModel):
     link_href: str | None = None
     is_published: bool | None = None
     is_pinned: bool | None = None
+
+    @field_validator("link_href")
+    @classmethod
+    def validate_link_href(cls, value: str | None):
+        return safe_public_url(value, allow_relative=True)
 
 
 class AnnouncementResponse(AnnouncementCreate):
@@ -396,6 +457,14 @@ class ResourceCreate(BaseModel):
     featured: bool = False
     is_published: bool = False
 
+    @field_validator("href")
+    @classmethod
+    def validate_href(cls, value: str):
+        validated = safe_public_url(value, allow_relative=True)
+        if validated is None:
+            raise ValueError("Resource link is required")
+        return validated
+
 
 class ResourceUpdate(BaseModel):
     title: str | None = None
@@ -406,6 +475,11 @@ class ResourceUpdate(BaseModel):
     href: str | None = None
     featured: bool | None = None
     is_published: bool | None = None
+
+    @field_validator("href")
+    @classmethod
+    def validate_href(cls, value: str | None):
+        return safe_public_url(value, allow_relative=True)
 
 
 class ResourceResponse(ResourceCreate):
@@ -424,6 +498,16 @@ class BoardMemberCreate(BaseModel):
     sort_order: int = 0
     is_published: bool = True
 
+    @field_validator("image_url")
+    @classmethod
+    def validate_image_url(cls, value: str | None):
+        return safe_public_url(value, allow_relative=True, allow_data_image=True)
+
+    @field_validator("linkedin_url")
+    @classmethod
+    def validate_linkedin_url(cls, value: str | None):
+        return safe_public_url(value)
+
 
 class BoardMemberUpdate(BaseModel):
     name: str | None = None
@@ -434,6 +518,16 @@ class BoardMemberUpdate(BaseModel):
     email: EmailStr | None = None
     sort_order: int | None = None
     is_published: bool | None = None
+
+    @field_validator("image_url")
+    @classmethod
+    def validate_image_url(cls, value: str | None):
+        return safe_public_url(value, allow_relative=True, allow_data_image=True)
+
+    @field_validator("linkedin_url")
+    @classmethod
+    def validate_linkedin_url(cls, value: str | None):
+        return safe_public_url(value)
 
 
 class BoardMemberResponse(BoardMemberCreate):

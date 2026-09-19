@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from jose import jwt, JWTError
+import jwt
+from jwt.exceptions import PyJWTError
 
 from app import schemas, models
 from app.config import settings
@@ -38,7 +39,7 @@ def verify_access_token(token: str, credentials_exception):
             settings.secret_key,
             algorithms=[settings.algorithm],
         )
-    except JWTError:
+    except PyJWTError:
         raise credentials_exception
 
     sub = payload.get("sub")

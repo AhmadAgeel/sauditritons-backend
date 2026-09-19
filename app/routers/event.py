@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
 
 from app import models, schemas, oauth2
 from app.database import get_db
+from app.rate_limits import guest_rsvp_ip_rate_limit
 
 from datetime import datetime, timezone
 import secrets
@@ -103,7 +104,13 @@ def create_rsvp(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(get_db),
 ):
-    event = db.get(models.Event, event_id)
+    # Lock the event row while counting occupied seats so simultaneous
+    # registrations cannot both claim the final place.
+    event = db.scalar(
+        select(models.Event)
+        .where(models.Event.id == event_id)
+        .with_for_update()
+    )
 
     if event is None or not event.is_published:
         raise HTTPException(
@@ -144,8 +151,13 @@ def create_rsvp(
     response_model=schemas.GuestEventRSVPResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_guest_rsvp(event_id: int, payload: schemas.GuestEventRSVPCreate, db: Session = Depends(get_db)):
-    event = db.get(models.Event, event_id)
+def create_guest_rsvp(event_id: int, payload: schemas.GuestEventRSVPCreate, request: Request, db: Session = Depends(get_db)):
+    guest_rsvp_ip_rate_limit(request)
+    event = db.scalar(
+        select(models.Event)
+        .where(models.Event.id == event_id)
+        .with_for_update()
+    )
     if event is None or not event.is_published:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     attendee_email = str(payload.attendee_email).lower()

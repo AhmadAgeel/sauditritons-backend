@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import oauth2, schemas
 from app.config import settings
+from app.middleware import RequestSizeLimitMiddleware, SecurityHeadersMiddleware
 from app.routers import router
 
 from contextlib import asynccontextmanager
@@ -23,6 +24,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_bytes)
+app.add_middleware(SecurityHeadersMiddleware, production=settings.environment == "production")
 
 app.add_middleware(
     CORSMiddleware,

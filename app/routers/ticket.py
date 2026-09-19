@@ -1,12 +1,15 @@
+import asyncio
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
 from app.database import get_db
 from app.redis import async_redis_client
+from app.rate_limits import public_ticket_ip_rate_limit
+from app.config import settings
 from app.wallet_pass import WalletNotConfiguredError, WalletServiceError, build_event_pass, wallet_is_configured, wallet_provider
 
 from sse_starlette.sse import EventSourceResponse
@@ -28,8 +31,10 @@ def wallet_status():
 )
 def get_ticket(
     ticket_code: str,
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    public_ticket_ip_rate_limit(request)
     normalized_code = ticket_code.replace("-", "").upper()
 
     stmt = (
@@ -61,7 +66,8 @@ def get_ticket(
 
 
 @router.get("/{ticket_code}/wallet")
-def download_wallet_pass(ticket_code: str, db: Session = Depends(get_db)):
+def download_wallet_pass(ticket_code: str, request: Request, db: Session = Depends(get_db)):
+    public_ticket_ip_rate_limit(request)
     normalized_code = ticket_code.replace("-", "").upper()
     member = db.scalar(
         select(models.EventRSVP)
@@ -102,6 +108,8 @@ def download_wallet_pass(ticket_code: str, db: Session = Depends(get_db)):
 @router.get("/{ticket_code}/events")
 async def ticket_events(
     ticket_code: str,
+    request: Request,
+    db: Session = Depends(get_db),
 ):
     """
     SSE stream for live ticket check-in updates.
@@ -114,6 +122,14 @@ async def ticket_events(
     """
 
     normalized_code = ticket_code.replace("-", "").upper()
+    public_ticket_ip_rate_limit(request)
+
+    member_exists = db.scalar(select(models.EventRSVP.ticket_code).where(models.EventRSVP.ticket_code == normalized_code))
+    guest_exists = None if member_exists else db.scalar(
+        select(models.GuestEventRSVP.ticket_code).where(models.GuestEventRSVP.ticket_code == normalized_code)
+    )
+    if member_exists is None and guest_exists is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
     async def event_generator():
         channel = f"ticket:{normalized_code}"
@@ -127,20 +143,24 @@ async def ticket_events(
                 "data": "",
             }
 
-            async for message in pubsub.listen():
-                if message["type"] != "message":
-                    continue
+            try:
+                async with asyncio.timeout(settings.ticket_stream_max_minutes * 60):
+                    async for message in pubsub.listen():
+                        if message["type"] != "message":
+                            continue
 
-                payload = schemas.TicketCheckInEvent.model_validate_json(
-                    message["data"]
-                )
+                        payload = schemas.TicketCheckInEvent.model_validate_json(
+                            message["data"]
+                        )
 
-                yield {
-                    "event": "checked_in",
-                    "data": payload.model_dump_json(),
-                }
+                        yield {
+                            "event": "checked_in",
+                            "data": payload.model_dump_json(),
+                        }
 
-                # A ticket can only be checked in once.
+                        # A ticket can only be checked in once.
+                        return
+            except TimeoutError:
                 return
 
     return EventSourceResponse(event_generator())

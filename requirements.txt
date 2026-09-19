@@ -5,7 +5,7 @@ psycopg[binary]
 pwdlib[argon2]
 pydantic-settings
 pyrate-limiter
-python-jose
+PyJWT
 python-multipart
 redis
 requests

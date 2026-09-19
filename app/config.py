@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
     database_username: str
     database_password: str
 
-    secret_key: str
+    secret_key: str = Field(min_length=32)
     algorithm: str = "HS256"
     magic_link_expiration_minutes: int = 15
 
@@ -32,6 +33,14 @@ class Settings(BaseSettings):
     redis_url: str
     magic_link_ip_limit: int = 10
     magic_link_ip_window_minutes: int = 10
+    password_login_email_limit: int = 8
+    password_login_email_window_minutes: int = 15
+    guest_rsvp_ip_limit: int = 12
+    guest_rsvp_ip_window_minutes: int = 60
+    public_ticket_ip_limit: int = 60
+    public_ticket_ip_window_minutes: int = 1
+    ticket_stream_max_minutes: int = 20
+    max_request_bytes: int = 3_000_000
 
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30

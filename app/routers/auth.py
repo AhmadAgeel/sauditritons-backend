@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app import models, schemas, utils, oauth2
 from app.database import get_db
 from app.email import email_service
-from app.rate_limits import magic_link_ip_rate_limit
+from app.rate_limits import magic_link_ip_rate_limit, password_login_email_rate_limit
 from app.config import settings
 
 import requests
@@ -95,6 +95,7 @@ def login(
     db: Session = Depends(get_db)
 ):
     email = normalize_email(user_credentials.username)
+    password_login_email_rate_limit(email)
     statement = select(models.User).where(models.User.email == email)
     user = db.execute(statement).scalar_one_or_none()
 
@@ -433,4 +434,3 @@ def logout(
             db.commit()
 
     refresh_tokens.delete_refresh_token_cookie(response)
-
