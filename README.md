@@ -22,6 +22,8 @@ Set local database credentials, a strong `SECRET_KEY`, and the frontend origin i
 
 Transactional email defaults to ZeptoMail for backwards compatibility. The recommended low-cost production option is Resend: verify `sauditritons.org`, then set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM` (for example `SSA <signin@sauditritons.org>`), and `AUTH_EMAIL_REPLY_TO`. Publish Resend's DKIM/SPF records before switching production. Postmark remains supported with `EMAIL_PROVIDER=postmark` and `POSTMARK_SERVER_TOKEN`.
 
+Guest RSVP can be protected with Cloudflare Turnstile without moving DNS to Cloudflare. Create a widget for `sauditritons.org` and `www.sauditritons.org`; add its public key to the frontend as `VITE_TURNSTILE_SITE_KEY`, then set the matching secret here as `TURNSTILE_SECRET_KEY`. Server validation is enforced only when the secret is present, so add the frontend key first during rollout. `TURNSTILE_ALLOWED_HOSTNAMES` is a comma-separated allowlist.
+
 Apple Wallet passes require an Apple Developer Pass Type ID certificate. Set `APPLE_WALLET_PASS_TYPE_IDENTIFIER`, `APPLE_WALLET_TEAM_IDENTIFIER`, and base64-encoded signing certificate, private key, and Apple WWDR certificate values. The ticket endpoint returns a signed `.pkpass` only when all five values are present; QR tickets and door scanning continue to work without Wallet credentials.
 
 Apply migrations and run the API:

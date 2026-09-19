@@ -259,6 +259,7 @@ class GuestEventRSVPCreate(BaseModel):
     attendee_email: EmailStr
     companion_names: list[str] = Field(default_factory=list, max_length=3)
     answers: dict[str, Any] = Field(default_factory=dict)
+    turnstile_token: str | None = Field(default=None, min_length=1, max_length=2048)
 
 
 class GuestEventRSVPResponse(BaseModel):

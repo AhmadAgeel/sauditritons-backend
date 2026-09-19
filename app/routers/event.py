@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from app import models, schemas, oauth2
 from app.database import get_db
 from app.rate_limits import guest_rsvp_ip_rate_limit
+from app.turnstile import verify_turnstile
 
 from datetime import datetime, timezone
 import secrets
@@ -153,6 +154,7 @@ def create_rsvp(
 )
 def create_guest_rsvp(event_id: int, payload: schemas.GuestEventRSVPCreate, request: Request, db: Session = Depends(get_db)):
     guest_rsvp_ip_rate_limit(request)
+    verify_turnstile(payload.turnstile_token, request.client.host if request.client else None)
     event = db.scalar(
         select(models.Event)
         .where(models.Event.id == event_id)

@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     password_login_email_window_minutes: int = 15
     guest_rsvp_ip_limit: int = 12
     guest_rsvp_ip_window_minutes: int = 60
+    turnstile_secret_key: str = ""
+    turnstile_verify_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    turnstile_allowed_hostnames: str = "sauditritons.org,www.sauditritons.org"
     public_ticket_ip_limit: int = 60
     public_ticket_ip_window_minutes: int = 1
     ticket_stream_max_minutes: int = 20
