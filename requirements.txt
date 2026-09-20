@@ -9,6 +9,9 @@ PyJWT
 python-multipart
 redis
 requests
+boto3
+Pillow
+pillow-heif
 sse-starlette
 uvicorn[standard]
 email-validator

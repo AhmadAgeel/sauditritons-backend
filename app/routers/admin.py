@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, joinedload
@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session, joinedload
 from app import models, oauth2, schemas
 from app.database import get_db
 from app.redis import redis_client
+from app.config import settings
+from app.storage import InvalidImageError, StorageNotConfiguredError, StorageUploadError, decode_inline_image, store_event_image
 
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -59,6 +61,58 @@ def overview(_: models.User = Depends(oauth2.get_current_staff), db: Session = D
 @router.get("/events", response_model=list[schemas.EventResponse])
 def list_events(_: models.User = Depends(oauth2.get_current_staff), db: Session = Depends(get_db)):
     return db.scalars(select(models.Event).order_by(models.Event.starts_at.desc())).all()
+
+
+@router.post("/uploads/images")
+async def upload_image(
+    image: UploadFile = File(...),
+    _: models.User = Depends(oauth2.get_current_staff),
+):
+    if image.content_type not in {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}:
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Upload a JPEG, PNG, HEIC, or WebP image")
+    source = await image.read(settings.object_storage_image_max_bytes + 1)
+    try:
+        stored = store_event_image(source)
+    except StorageNotConfiguredError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Image storage is not configured yet")
+    except InvalidImageError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
+    except StorageUploadError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error))
+    return {
+        "url": stored.url,
+        "key": stored.key,
+        "width": stored.width,
+        "height": stored.height,
+        "bytes": stored.bytes,
+        "content_type": stored.content_type,
+    }
+
+
+@router.post("/uploads/migrate-inline-event-images")
+def migrate_inline_event_images(
+    actor: models.User = Depends(oauth2.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    records = db.scalars(select(models.Event).where(models.Event.image_url.like("data:image/%"))).all()
+    migrated: list[dict] = []
+    try:
+        for record in records:
+            source = decode_inline_image(record.image_url or "")
+            stored = store_event_image(source)
+            record.image_url = stored.url
+            migrated.append({"event_id": record.id, "url": stored.url})
+    except StorageNotConfiguredError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Image storage is not configured yet")
+    except InvalidImageError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
+    except StorageUploadError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error))
+
+    if migrated:
+        audit(db, actor, "event.images_migrated", "event", "bulk", {"event_ids": [item["event_id"] for item in migrated]})
+        db.commit()
+    return {"migrated": len(migrated), "events": migrated}
 
 
 @router.post("/events", response_model=schemas.EventResponse, status_code=status.HTTP_201_CREATED)

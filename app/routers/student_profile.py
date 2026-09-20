@@ -14,7 +14,10 @@ router = APIRouter(
 
 
 @router.get("/", response_model=list[schemas.StudentProfileResponse])
-def get_student_profiles(db: Session = Depends(get_db)):
+def get_student_profiles(
+    _: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(get_db),
+):
     stmt = (
         select(models.StudentProfile)
         .join(models.StudentProfile.user)

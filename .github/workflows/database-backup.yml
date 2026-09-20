@@ -1,0 +1,35 @@
+name: Production database backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "31 9 * * *"
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      BACKUP_S3_ENDPOINT_URL: ${{ secrets.BACKUP_S3_ENDPOINT_URL }}
+      BACKUP_S3_REGION: ${{ secrets.BACKUP_S3_REGION }}
+      BACKUP_S3_URL_STYLE: ${{ secrets.BACKUP_S3_URL_STYLE }}
+      BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      BACKUP_RETENTION_DAYS: "30"
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify backup secrets
+        run: |
+          test -n "$PRODUCTION_DATABASE_URL"
+          test -n "$BACKUP_S3_ACCESS_KEY_ID"
+          test -n "$BACKUP_S3_SECRET_ACCESS_KEY"
+          test -n "$BACKUP_S3_BUCKET"
+      - name: Install PostgreSQL client and Python dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          python -m pip install boto3
+      - name: Back up database
+        run: python scripts/backup_database.py

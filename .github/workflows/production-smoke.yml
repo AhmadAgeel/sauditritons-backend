@@ -1,0 +1,21 @@
+name: Production smoke checks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17,47 * * * *"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check website
+        run: curl --fail --silent --show-error --retry 2 https://sauditritons.org/ > /dev/null
+      - name: Check API dependencies
+        run: |
+          response="$(curl --fail --silent --show-error --retry 2 https://api.sauditritons.org/health/ready)"
+          echo "$response"
+          test "$(echo "$response" | jq -r .status)" = "ready"
+      - name: Check published events
+        run: curl --fail --silent --show-error --retry 2 https://api.sauditritons.org/events > /dev/null

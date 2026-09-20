@@ -42,9 +42,10 @@ def validate_registration(event: models.Event, db: Session, requested_seats: int
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[schemas.EventResponse],
 )
+@router.get("/", response_model=list[schemas.EventResponse], include_in_schema=False)
 def get_events(
     db: Session = Depends(get_db),
 ):

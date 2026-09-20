@@ -51,7 +51,16 @@ class Settings(BaseSettings):
     public_ticket_ip_limit: int = 60
     public_ticket_ip_window_minutes: int = 1
     ticket_stream_max_minutes: int = 20
-    max_request_bytes: int = 3_000_000
+    max_request_bytes: int = 12_000_000
+
+    object_storage_endpoint_url: str = ""
+    object_storage_region: str = "auto"
+    object_storage_url_style: Literal["path", "virtual"] = "path"
+    object_storage_access_key_id: str = ""
+    object_storage_secret_access_key: str = ""
+    object_storage_bucket: str = ""
+    object_storage_public_base_url: str = ""
+    object_storage_image_max_bytes: int = 10_000_000
 
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30

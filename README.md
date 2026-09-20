@@ -57,3 +57,5 @@ The older `/internal` routes remain authenticated for compatibility, but the cur
 ## Production dependencies
 
 Production requires hosted PostgreSQL and Redis, HTTPS frontend and API URLs, secure cookies, permitted CORS origins, and provider credentials for email. Images and PDFs should use an object-storage provider and store only their URLs in PostgreSQL.
+
+Event image uploads support Cloudflare R2, AWS S3, Railway Buckets, and other S3-compatible providers through the `OBJECT_STORAGE_*` variables in `.env.example`. The admin upload route stores a high-quality WebP object and returns its HTTPS URL. Railway Buckets stay private and are served through the validated `/media/events/...` API route. Operational health checks, scheduled smoke tests, and backup instructions are documented in `OPERATIONS.md`.
