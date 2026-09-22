@@ -10,15 +10,15 @@
 
 Prefer enabling Railway PostgreSQL volume backups in the Postgres service's **Backups** tab. Keep at least seven daily restore points.
 
-The repository also includes an independent daily backup workflow. Add these GitHub Actions repository secrets:
+The repository also includes an independent daily backup workflow. It runs on GitHub-hosted runners, outside Railway's private network. In **Settings → Secrets and variables → Actions** for `AhmadAgeel/sauditritons-backend`, add these repository secrets:
 
-- `PRODUCTION_DATABASE_URL`
-- `BACKUP_S3_ENDPOINT_URL` (optional for AWS S3)
-- `BACKUP_S3_REGION`
-- `BACKUP_S3_URL_STYLE` (`virtual` for new Railway Buckets; `path` for AWS S3 and older buckets)
-- `BACKUP_S3_ACCESS_KEY_ID`
-- `BACKUP_S3_SECRET_ACCESS_KEY`
-- `BACKUP_S3_BUCKET`
+- `PRODUCTION_DATABASE_URL`: the Postgres service's **public TCP proxy** connection URL, not a `railway.internal` address. Enable TCP Proxy in the Postgres service if no public URL exists. Use a read-only database account if one is available.
+- `BACKUP_S3_ENDPOINT_URL`: the storage bucket's S3 endpoint (optional only for AWS S3).
+- `BACKUP_S3_REGION`: the bucket region, or `auto` for Railway Buckets.
+- `BACKUP_S3_URL_STYLE`: `virtual` for Railway Buckets; `path` for older S3-compatible buckets.
+- `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_S3_BUCKET`: the credentials and exact bucket name from the bucket's **Credentials** tab. Prefer a dedicated private backup bucket with restricted access.
+
+Railway service variables do not automatically become GitHub Actions secrets. The workflow fails at **Verify backup secrets** if any required GitHub secret is missing, and names the missing entries without printing their values.
 
 Run **Production database backup** manually once and verify the resulting `database/YYYY/MM/*.dump.gz` object before relying on its schedule.
 
