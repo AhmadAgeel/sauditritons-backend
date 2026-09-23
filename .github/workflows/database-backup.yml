@@ -5,42 +5,45 @@ on:
   schedule:
     - cron: "31 9 * * *"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: production-database-backup
+  cancel-in-progress: false
+
 jobs:
   backup:
-    runs-on: ubuntu-latest
+    if: github.repository == 'falsenayin/sauditritons-backend' && github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.BACKUP_ENABLED == 'true')
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-      BACKUP_S3_ENDPOINT_URL: ${{ secrets.BACKUP_S3_ENDPOINT_URL }}
-      BACKUP_S3_REGION: ${{ secrets.BACKUP_S3_REGION }}
-      BACKUP_S3_URL_STYLE: ${{ secrets.BACKUP_S3_URL_STYLE }}
-      BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
-      BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
-      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
-      BACKUP_RETENTION_DAYS: "30"
+      BACKUP_API_URL: https://api.sauditritons.org/internal/backups/database
+      MAX_BACKUP_BYTES: "26214400"
     steps:
       - uses: actions/checkout@v5
-      - name: Verify backup secrets
+        with:
+          persist-credentials: false
+      - name: Verify backup configuration
+        shell: bash
+        env:
+          BACKUP_EXPORT_TOKEN: ${{ secrets.BACKUP_EXPORT_TOKEN }}
         run: |
-          missing=0
-          for name in PRODUCTION_DATABASE_URL BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY BACKUP_S3_BUCKET; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Missing GitHub Actions secret: $name"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::Add the missing repository secrets before running this workflow. See OPERATIONS.md#database-backups."
+          if [ -z "$BACKUP_EXPORT_TOKEN" ]; then
+            echo "::error::Missing GitHub Actions secret: BACKUP_EXPORT_TOKEN"
             exit 1
           fi
-          if [[ "$PRODUCTION_DATABASE_URL" == *railway.internal* ]]; then
-            echo "::error::PRODUCTION_DATABASE_URL must use the Postgres public TCP proxy URL because GitHub runners cannot reach Railway private DNS."
-            exit 1
-          fi
-      - name: Install PostgreSQL client and Python dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-          python -m pip install boto3
-      - name: Back up database
-        run: python scripts/backup_database.py
+      - name: Create and validate encrypted backup
+        id: backup
+        shell: bash
+        env:
+          BACKUP_EXPORT_TOKEN: ${{ secrets.BACKUP_EXPORT_TOKEN }}
+        run: bash scripts/backup_to_artifact.sh
+      - name: Store encrypted backup for seven days
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssa-postgres-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.backup.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0

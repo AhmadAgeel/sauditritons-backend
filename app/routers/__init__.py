@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from . import user, auth, student_profile, whatsapp, event, ticket, internal, admin, content, media
+from . import user, auth, student_profile, whatsapp, event, ticket, internal, admin, content, media, backup
 
 router = APIRouter()
 
@@ -14,3 +14,4 @@ router.include_router(internal.router)
 router.include_router(admin.router)
 router.include_router(content.router)
 router.include_router(media.router)
+router.include_router(backup.router)

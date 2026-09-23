@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     object_storage_public_base_url: str = ""
     object_storage_image_max_bytes: int = 10_000_000
 
+    backup_export_token: str = ""
+    backup_age_recipient: str = ""
+
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
     cookie_secure: bool
