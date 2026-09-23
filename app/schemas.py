@@ -212,6 +212,11 @@ class EventResponse(EventCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PublicEventResponse(EventResponse):
+    remaining_seats: int | None
+    registration_status: Literal["open", "full", "closed", "not_open"]
+
+
 class EventUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None

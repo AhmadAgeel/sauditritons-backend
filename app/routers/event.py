@@ -27,11 +27,16 @@ def generate_ticket_code() -> str:
     )
 
 
+def aware_utc(value: datetime) -> datetime:
+    """Treat timezone-less values from lightweight test databases as UTC."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
 def validate_registration(event: models.Event, db: Session, requested_seats: int = 1):
     now = datetime.now(timezone.utc)
-    if event.rsvp_opens_at is not None and now < event.rsvp_opens_at:
+    if event.rsvp_opens_at is not None and now < aware_utc(event.rsvp_opens_at):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="RSVP has not opened yet")
-    if now >= event.rsvp_closes_at:
+    if now >= aware_utc(event.rsvp_closes_at):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="RSVP has closed")
     if event.capacity is not None:
         member_groups = db.scalars(select(models.EventRSVP.companion_names).where(models.EventRSVP.event_id == event.id)).all()
@@ -41,11 +46,42 @@ def validate_registration(event: models.Event, db: Session, requested_seats: int
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This event is full")
 
 
+def occupied_seats_by_event(db: Session, event_ids: list[int]) -> dict[int, int]:
+    """Count each registrant and their companions without exposing RSVP data."""
+    if not event_ids:
+        return {}
+    occupied: dict[int, int] = {}
+    for model in (models.EventRSVP, models.GuestEventRSVP):
+        rows = db.execute(
+            select(model.event_id, model.companion_names).where(model.event_id.in_(event_ids))
+        )
+        for event_id, companions in rows:
+            occupied[event_id] = occupied.get(event_id, 0) + 1 + len(companions or [])
+    return occupied
+
+
+def public_event_response(event: models.Event, occupied: int, now: datetime) -> dict:
+    remaining = None if event.capacity is None else max(0, event.capacity - occupied)
+    if event.rsvp_opens_at is not None and now < aware_utc(event.rsvp_opens_at):
+        registration_status = "not_open"
+    elif now >= aware_utc(event.rsvp_closes_at):
+        registration_status = "closed"
+    elif remaining == 0:
+        registration_status = "full"
+    else:
+        registration_status = "open"
+    return {
+        **schemas.EventResponse.model_validate(event).model_dump(),
+        "remaining_seats": remaining,
+        "registration_status": registration_status,
+    }
+
+
 @router.get(
     "",
-    response_model=list[schemas.EventResponse],
+    response_model=list[schemas.PublicEventResponse],
 )
-@router.get("/", response_model=list[schemas.EventResponse], include_in_schema=False)
+@router.get("/", response_model=list[schemas.PublicEventResponse], include_in_schema=False)
 def get_events(
     db: Session = Depends(get_db),
 ):
@@ -55,7 +91,10 @@ def get_events(
         .order_by(models.Event.starts_at)
     )
 
-    return db.scalars(stmt).all()
+    events = db.scalars(stmt).all()
+    occupied = occupied_seats_by_event(db, [event.id for event in events])
+    now = datetime.now(timezone.utc)
+    return [public_event_response(event, occupied.get(event.id, 0), now) for event in events]
 
 
 @router.get(
@@ -78,7 +117,7 @@ def get_my_rsvps(
 
 @router.get(
     "/{event_id}",
-    response_model=schemas.EventResponse,
+    response_model=schemas.PublicEventResponse,
 )
 def get_event(
     event_id: int,
@@ -92,7 +131,8 @@ def get_event(
             detail="Event not found",
         )
 
-    return event
+    occupied = occupied_seats_by_event(db, [event.id])
+    return public_event_response(event, occupied.get(event.id, 0), datetime.now(timezone.utc))
 
 
 @router.post(
