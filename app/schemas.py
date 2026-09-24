@@ -567,5 +567,36 @@ class AdminRsvpResponse(BaseModel):
     created_at: datetime
 
 
+class AdminAttendeeResponse(BaseModel):
+    id: str
+    source: Literal["member", "guest", "walk_in"]
+    ticket_code: str | None
+    attendee_name: str
+    attendee_email: str | None
+    companion_names: list[str]
+    companion_count: int
+    has_paid: bool
+    registered_at: datetime
+    checked_in_at: datetime | None
+
+
+class EventWalkInCreate(BaseModel):
+    attendee_name: str = Field(min_length=1, max_length=160)
+    attendee_email: EmailStr | None = None
+    mark_paid: bool = False
+
+
+class EventWalkInResponse(BaseModel):
+    id: int
+    event_id: int
+    attendee_name: str
+    attendee_email: str | None
+    has_paid: bool
+    created_at: datetime
+    checked_in_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AdminCheckInCreate(BaseModel):
     mark_paid: bool = False

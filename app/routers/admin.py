@@ -158,6 +158,74 @@ def event_rsvps(event_id: int, _: models.User = Depends(oauth2.get_current_offic
     return [schemas.AdminRsvpResponse(ticket_code=row.ticket_code, attendee_name=f"{row.user.first_name} {row.user.last_name}", attendee_email=row.user.email, companion_count=len(row.companion_names), has_paid=row.has_paid, checked_in_at=row.check_in.checked_in_at if row.check_in else None, created_at=row.created_at) for row in member_rows] + [schemas.AdminRsvpResponse(ticket_code=row.ticket_code, attendee_name=row.attendee_name, attendee_email=row.attendee_email, companion_count=len(row.companion_names), has_paid=row.has_paid, checked_in_at=row.check_in.checked_in_at if row.check_in else None, created_at=row.created_at) for row in guest_rows]
 
 
+@router.get("/events/{event_id}/attendees", response_model=list[schemas.AdminAttendeeResponse])
+def event_attendees(event_id: int, _: models.User = Depends(oauth2.get_current_officer), db: Session = Depends(get_db)):
+    require_record(db, models.Event, event_id)
+    member_rows = db.scalars(select(models.EventRSVP).options(joinedload(models.EventRSVP.user), joinedload(models.EventRSVP.check_in)).where(models.EventRSVP.event_id == event_id)).all()
+    guest_rows = db.scalars(select(models.GuestEventRSVP).options(joinedload(models.GuestEventRSVP.check_in)).where(models.GuestEventRSVP.event_id == event_id)).all()
+    walk_ins = db.scalars(select(models.EventWalkIn).where(models.EventWalkIn.event_id == event_id)).all()
+    attendees = [
+        schemas.AdminAttendeeResponse(
+            id=f"member:{row.ticket_code}", source="member", ticket_code=row.ticket_code,
+            attendee_name=f"{row.user.first_name} {row.user.last_name}", attendee_email=row.user.email,
+            companion_names=row.companion_names, companion_count=len(row.companion_names),
+            has_paid=row.has_paid, registered_at=row.created_at,
+            checked_in_at=row.check_in.checked_in_at if row.check_in else None,
+        ) for row in member_rows
+    ]
+    attendees.extend(
+        schemas.AdminAttendeeResponse(
+            id=f"guest:{row.ticket_code}", source="guest", ticket_code=row.ticket_code,
+            attendee_name=row.attendee_name, attendee_email=row.attendee_email,
+            companion_names=row.companion_names, companion_count=len(row.companion_names),
+            has_paid=row.has_paid, registered_at=row.created_at,
+            checked_in_at=row.check_in.checked_in_at if row.check_in else None,
+        ) for row in guest_rows
+    )
+    attendees.extend(
+        schemas.AdminAttendeeResponse(
+            id=f"walk_in:{row.id}", source="walk_in", ticket_code=None,
+            attendee_name=row.attendee_name, attendee_email=row.attendee_email,
+            companion_names=[], companion_count=0, has_paid=row.has_paid,
+            registered_at=row.created_at, checked_in_at=row.checked_in_at,
+        ) for row in walk_ins
+    )
+    return sorted(attendees, key=lambda row: row.registered_at, reverse=True)
+
+
+@router.post("/events/{event_id}/walk-ins", response_model=schemas.EventWalkInResponse, status_code=status.HTTP_201_CREATED)
+def admit_walk_in(event_id: int, payload: schemas.EventWalkInCreate, actor: models.User = Depends(oauth2.get_current_officer), db: Session = Depends(get_db)):
+    event = require_record(db, models.Event, event_id)
+    name = payload.attendee_name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Enter the attendee's name")
+    if event.is_paid and not payload.mark_paid:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Confirm payment before admitting a walk-in")
+    # Walk-ins are admitted at the door. They do not need a ticket or email,
+    # and intentionally do not change the public RSVP capacity calculation.
+    record = models.EventWalkIn(
+        event_id=event_id, attendee_name=name,
+        attendee_email=str(payload.attendee_email).lower() if payload.attendee_email else None,
+        recorded_by_user_id=actor.id, has_paid=bool(event.is_paid and payload.mark_paid),
+    )
+    db.add(record)
+    db.flush()
+    audit(db, actor, "walk_in.admitted", "event_walk_in", record.id, {"event_id": event_id, "capacity_override": True, "marked_paid": record.has_paid})
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.delete("/events/{event_id}/walk-ins/{walk_in_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_walk_in(event_id: int, walk_in_id: int, actor: models.User = Depends(oauth2.get_current_officer), db: Session = Depends(get_db)):
+    record = require_record(db, models.EventWalkIn, walk_in_id)
+    if record.event_id != event_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Walk-in not found for this event")
+    audit(db, actor, "walk_in.removed", "event_walk_in", walk_in_id, {"event_id": event_id})
+    db.delete(record)
+    db.commit()
+
+
 def event_registration(db: Session, event_id: int, ticket_code: str):
     normalized = ticket_code.replace("-", "").upper()
     registration = db.scalar(select(models.EventRSVP).where(models.EventRSVP.ticket_code == normalized))
